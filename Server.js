@@ -29,7 +29,7 @@ mongoose
 
 // Mongoose Schema
 const contentSchema = new mongoose.Schema({
-  text: String,
+  description: String, // renamed to match frontend field
   image: String,
   video: String,
 });
@@ -47,46 +47,48 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Routes
+// -------------------- ROUTES --------------------
 
-// Create new item
-app.post("/api/create", upload.fields([{ name: "image" }, { name: "video" }]), async (req, res) => {
-  const { text } = req.body;
+// Create post
+app.post("/api/posts", upload.fields([{ name: "image" }, { name: "video" }]), async (req, res) => {
+  const { description } = req.body;
   const image = req.files.image ? req.files.image[0].filename : null;
   const video = req.files.video ? req.files.video[0].filename : null;
 
   try {
-    const newItem = new Content({ text, image, video });
-    await newItem.save();
-    res.status(201).json(newItem);
+    const newPost = new Content({ description, image, video });
+    await newPost.save();
+    res.status(201).json(newPost);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Get all items
-app.get("/api/items", async (req, res) => {
+// Get all posts
+app.get("/api/posts", async (req, res) => {
   try {
-    const items = await Content.find();
-    res.json(items);
+    const posts = await Content.find().sort({ _id: -1 });
+    res.json(posts);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Delete item
-app.delete("/api/delete/:id", async (req, res) => {
+// Delete post
+app.delete("/api/posts/:id", async (req, res) => {
   try {
-    const item = await Content.findByIdAndDelete(req.params.id);
-    if (item.image) fs.unlinkSync(path.join(__dirname, "uploads", item.image));
-    if (item.video) fs.unlinkSync(path.join(__dirname, "uploads", item.video));
+    const post = await Content.findByIdAndDelete(req.params.id);
+    if (!post) return res.status(404).json({ error: "Post not found" });
+
+    if (post.image) fs.unlinkSync(path.join(__dirname, "uploads", post.image));
+    if (post.video) fs.unlinkSync(path.join(__dirname, "uploads", post.video));
+
     res.json({ message: "Deleted" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Server listen
+// -------------------- START SERVER --------------------
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
-
