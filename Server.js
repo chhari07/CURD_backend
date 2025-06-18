@@ -1,3 +1,4 @@
+// File: backend/Server.js
 
 const express = require("express");
 const mongoose = require("mongoose");
@@ -9,13 +10,20 @@ const fs = require("fs");
 
 dotenv.config();
 const app = express();
+
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// Ensure uploads folder exists
+if (!fs.existsSync("uploads")) {
+  fs.mkdirSync("uploads");
+}
+
 // MongoDB Connect
 mongoose
-  .connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.error("❌ MongoDB connection failed:", err));
 
@@ -40,10 +48,13 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // Routes
+
+// Create new item
 app.post("/api/create", upload.fields([{ name: "image" }, { name: "video" }]), async (req, res) => {
   const { text } = req.body;
   const image = req.files.image ? req.files.image[0].filename : null;
   const video = req.files.video ? req.files.video[0].filename : null;
+
   try {
     const newItem = new Content({ text, image, video });
     await newItem.save();
@@ -53,11 +64,17 @@ app.post("/api/create", upload.fields([{ name: "image" }, { name: "video" }]), a
   }
 });
 
+// Get all items
 app.get("/api/items", async (req, res) => {
-  const items = await Content.find();
-  res.json(items);
+  try {
+    const items = await Content.find();
+    res.json(items);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
+// Delete item
 app.delete("/api/delete/:id", async (req, res) => {
   try {
     const item = await Content.findByIdAndDelete(req.params.id);
@@ -69,5 +86,7 @@ app.delete("/api/delete/:id", async (req, res) => {
   }
 });
 
+// Server listen
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
