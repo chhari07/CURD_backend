@@ -1,98 +1,73 @@
+
 const express = require("express");
 const mongoose = require("mongoose");
-const multer = require("multer");
 const cors = require("cors");
+const multer = require("multer");
+const dotenv = require("dotenv");
 const path = require("path");
-require("dotenv").config();
+const fs = require("fs");
 
-const Post = require("./models/Post");
-
+dotenv.config();
 const app = express();
-const PORT = process.env.PORT || 5000;
-
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// MongoDB connection
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log("✅ MongoDB connected"))
-.catch(err => console.error("❌ MongoDB connection failed:", err));
+// MongoDB Connect
+mongoose
+  .connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch((err) => console.error("❌ MongoDB connection failed:", err));
 
-// Multer config
+// Mongoose Schema
+const contentSchema = new mongoose.Schema({
+  text: String,
+  image: String,
+  video: String,
+});
+
+const Content = mongoose.model("Content", contentSchema);
+
+// Multer Config
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads"),
-  filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname),
+  destination: (req, file, cb) => {
+    cb(null, "uploads/");
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + "-" + file.originalname);
+  },
 });
 const upload = multer({ storage });
 
-// CREATE
-app.post(
-  "/api/posts",
-  upload.fields([{ name: "image" }, { name: "video" }]),
-  async (req, res) => {
-    try {
-      const { description } = req.body;
-      const image = req.files.image?.[0]?.path || "";
-      const video = req.files.video?.[0]?.path || "";
-
-      const post = new Post({ description, image, video });
-      await post.save();
-      res.status(201).json(post);
-    } catch (err) {
-      res.status(500).json({ error: "Failed to create post" });
-    }
-  }
-);
-
-// READ
-app.get("/api/posts", async (req, res) => {
+// Routes
+app.post("/api/create", upload.fields([{ name: "image" }, { name: "video" }]), async (req, res) => {
+  const { text } = req.body;
+  const image = req.files.image ? req.files.image[0].filename : null;
+  const video = req.files.video ? req.files.video[0].filename : null;
   try {
-    const posts = await Post.find().sort({ createdAt: -1 });
-    res.json(posts);
+    const newItem = new Content({ text, image, video });
+    await newItem.save();
+    res.status(201).json(newItem);
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch posts" });
+    res.status(500).json({ error: err.message });
   }
 });
 
-// UPDATE
-app.put(
-  "/api/posts/:id",
-  upload.fields([{ name: "image" }, { name: "video" }]),
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { description } = req.body;
+app.get("/api/items", async (req, res) => {
+  const items = await Content.find();
+  res.json(items);
+});
 
-      const updateData = { description };
-      if (req.files.image) updateData.image = req.files.image[0].path;
-      if (req.files.video) updateData.video = req.files.video[0].path;
-
-      const updatedPost = await Post.findByIdAndUpdate(id, updateData, {
-        new: true,
-      });
-
-      res.json(updatedPost);
-    } catch (err) {
-      res.status(500).json({ error: "Failed to update post" });
-    }
-  }
-);
-
-// DELETE
-app.delete("/api/posts/:id", async (req, res) => {
+app.delete("/api/delete/:id", async (req, res) => {
   try {
-    await Post.findByIdAndDelete(req.params.id);
-    res.json({ success: true });
+    const item = await Content.findByIdAndDelete(req.params.id);
+    if (item.image) fs.unlinkSync(path.join(__dirname, "uploads", item.image));
+    if (item.video) fs.unlinkSync(path.join(__dirname, "uploads", item.video));
+    res.json({ message: "Deleted" });
   } catch (err) {
-    res.status(500).json({ error: "Failed to delete post" });
+    res.status(500).json({ error: err.message });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
